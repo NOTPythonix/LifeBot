@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>ESP32-S3 Web IDE</title>
+<title>LifeBot Web Editor</title>
 <style>
   body {
     margin: 0;
@@ -34,6 +34,459 @@
     border-radius: 4px;
     background: #111;
     border: 1px solid #333;
+    cursor: pointer;
+    font-size: 12px;
+  }
+  .tab.active {
+    background: #1b3b5a;
+    border-color: #6cf;
+  }
+  #main {
+    display: grid;
+    grid-template-columns: 1.2fr 1fr;
+    grid-template-rows: 1.1fr 0.9fr;
+    grid-template-areas:
+      "editor terminal"
+      "graph terminal";
+    height: calc(100vh - 50px);
+  }
+  #editorPane {
+    grid-area: editor;
+    border-right: 1px solid #222;
+    border-bottom: 1px solid #222;
+    display: flex;
+    flex-direction: column;
+  }
+  #terminalPane {
+    grid-area: terminal;
+    border-left: 1px solid #222;
+    display: flex;
+    flex-direction: column;
+  }
+  #graphPane {
+    grid-area: graph;
+    border-right: 1px solid #222;
+    display: flex;
+    flex-direction: column;
+  }
+  .paneHeader {
+    padding: 6px 10px;
+    background: #0b0b12;
+    border-bottom: 1px solid #222;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .paneHeader span.title {
+    color: #6cf;
+  }
+  #editor {
+    flex: 1;
+    border: none;
+  }
+  #terminal {
+    flex: 1;
+    background: #000;
+    color: #0f0;
+    padding: 8px;
+    overflow-y: auto;
+    font-size: 12px;
+    white-space: pre-wrap;
+  }
+  #terminalInputBar {
+    display: flex;
+    gap: 5px;
+    padding: 6px;
+    background: #0b0b12;
+    border-top: 1px solid #222;
+  }
+  #cmdInput {
+    flex: 1;
+    padding: 6px;
+    background: #111;
+    color: #fff;
+    border: 1px solid #444;
+    font-size: 12px;
+  }
+  button, select, input[type="file"] {
+    padding: 5px 8px;
+    background: #15151c;
+    color: #eee;
+    border: 1px solid #444;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  button:hover {
+    background: #222230;
+  }
+  label {
+    font-size: 11px;
+  }
+  #graphCanvas {
+    flex: 1;
+    background: #050509;
+  }
+  #graphControls {
+    padding: 4px 8px;
+    font-size: 11px;
+    background: #0b0b12;
+    border-top: 1px solid #222;
+  }
+  #robotButtons button {
+    font-size: 11px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>LifeBot Web Editor</h1>
+  <button id="connectBtn">+ Connect Device</button>
+  <select id="baudRate">
+    <option value="9600">9600</option>
+    <option value="19200">19200</option>
+    <option value="38400">38400</option>
+    <option value="57600">57600</option>
+    <option value="115200" selected>115200</option>
+    <option value="230400">230400</option>
+    <option value="460800">460800</option>
+  </select>
+  <button id="rebootBtn">Reboot Active</button>
+  <div id="deviceTabs"></div>
+</header>
+
+<div id="main">
+  <!-- Editor -->
+  <div id="editorPane">
+    <div class="paneHeader">
+      <span class="title">Editor</span>
+      <button id="runScriptBtn">Send Script to Active</button>
+      <button id="saveScriptBtn">Save Script</button>
+      <button id="loadScriptBtn">Load Script</button>
+      <input type="file" id="fileInput" style="max-width:150px;">
+    </div>
+    <div id="editor">// Write Arduino‑style script here
+// Example:
+script begin
+int i = 0;
+for(int i=0; i<3; i=i+1) {
+  print("Loop");
+  forward();
+  delay(300);
+  stop();
+}
+script end
+</div>
+  </div>
+
+  <!-- Terminal -->
+  <div id="terminalPane">
+    <div class="paneHeader">
+      <span class="title">Terminal</span>
+      <button id="clearTerminalBtn">Clear</button>
+      <label><input type="checkbox" id="autoScroll" checked> Auto‑scroll</label>
+      <div id="robotButtons">
+        <button data-cmd="forward()">Forward</button>
+        <button data-cmd="left()">Left</button>
+        <button data-cmd="right()">Right</button>
+        <button data-cmd="backward()">Backward</button>
+        <button data-cmd="stop()">Stop</button>
+      </div>
+    </div>
+    <div id="terminal"></div>
+    <div id="terminalInputBar">
+      <input id="cmdInput" placeholder="Type a command…">
+      <button id="sendCmdBtn">Send</button>
+    </div>
+  </div>
+
+  <!-- Graph -->
+  <div id="graphPane">
+    <div class="paneHeader">
+      <span class="title">Sensor Graph</span>
+      <span style="font-size:11px;">(expects lines like: <code>PLOT: 123</code>)</span>
+    </div>
+    <canvas id="graphCanvas"></canvas>
+    <div id="graphControls">
+      <label>Max points:
+        <input type="number" id="maxPoints" value="200" style="width:60px;">
+      </label>
+      <label style="margin-left:10px;">Auto scale
+        <input type="checkbox" id="autoScale" checked>
+      </label>
+    </div>
+  </div>
+</div>
+
+<!-- Ace Editor -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.3/ace.js" integrity="sha512-+v4p4X0q5pG+3p0q3p3Xv3Q7X0zqX2t0u3bq3bq3bq3bq3bq3bq3bq==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.3/ext-language_tools.min.js"></script>
+
+<script>
+let devices = []; // {port, reader, writer, name}
+let activeIndex = -1;
+let history = [];
+let historyIndex = -1;
+
+// ----- Ace Editor setup -----
+const aceEditor = ace.edit("editor");
+aceEditor.setTheme("ace/theme/monokai");
+aceEditor.session.setMode("ace/mode/c_cpp");
+aceEditor.setOptions({
+  fontSize: "13px",
+  showPrintMargin: false,
+  enableBasicAutocompletion: true,
+  enableLiveAutocompletion: true,
+  enableSnippets: true,
+  useSoftTabs: true,
+  tabSize: 2,
+  wrap: true
+});
+aceEditor.session.setUseWrapMode(true);
+aceEditor.session.setFoldStyle("markbeginend");
+
+function getEditorText() {
+  return aceEditor.getValue();
+}
+
+// ----- Tabs / devices -----
+function addDeviceTab(name) {
+  const tabs = document.getElementById("deviceTabs");
+  const idx = devices.length - 1;
+  const tab = document.createElement("div");
+  tab.className = "tab" + (idx === activeIndex ? " active" : "");
+  tab.textContent = name;
+  tab.onclick = () => setActiveDevice(idx);
+  tab.dataset.index = idx;
+  tabs.appendChild(tab);
+}
+
+function refreshTabs() {
+  const tabs = document.getElementById("deviceTabs").children;
+  for (let i = 0; i < tabs.length; i++) {
+    tabs[i].classList.toggle("active", parseInt(tabs[i].dataset.index) === activeIndex);
+  }
+}
+
+function setActiveDevice(idx) {
+  activeIndex = idx;
+  refreshTabs();
+  log(`Active device: ${devices[idx].name}`, "#6cf");
+}
+
+function log(msg, color="#0f0") {
+  const term = document.getElementById("terminal");
+  term.innerHTML += `<span style="color:${color}">${msg}</span>\n`;
+  if (document.getElementById("autoScroll").checked)
+    term.scrollTop = term.scrollHeight;
+}
+
+async function connectDevice() {
+  try {
+    const port = await navigator.serial.requestPort();
+    await port.open({ baudRate: parseInt(document.getElementById("baudRate").value) });
+
+    const decoder = new TextDecoderStream();
+    port.readable.pipeTo(decoder.writable);
+    const reader = decoder.readable.getReader();
+
+    const encoder = new TextEncoderStream();
+    encoder.readable.pipeTo(port.writable);
+    const writer = encoder.writable.getWriter();
+
+    const name = `LifeBot #${devices.length + 1}`;
+    devices.push({ port, reader, writer, name });
+    activeIndex = devices.length - 1;
+    addDeviceTab(name);
+    refreshTabs();
+    log(`✔ LifeBot connected: ${name}`, "#6cf");
+
+    readLoop(activeIndex);
+  } catch (err) {
+    log("❌ Connection failed: " + err, "red");
+  }
+}
+
+async function readLoop(index) {
+  const dev = devices[index];
+  while (true) {
+    const { value, done } = await dev.reader.read();
+    if (done) break;
+    if (value) {
+      log(value);
+      handleSensorData(value);
+    }
+  }
+}
+
+async function sendToActive(text) {
+  if (activeIndex < 0) {
+    log("No active device", "red");
+    return;
+  }
+  const dev = devices[activeIndex];
+  await dev.writer.write(text + "\n");
+}
+
+async function rebootActive() {
+  if (activeIndex < 0) {
+    log("No active device", "red");
+    return;
+  }
+  const dev = devices[activeIndex];
+  try {
+    await dev.port.setSignals({ dataTerminalReady: false });
+    await new Promise(r => setTimeout(r, 100));
+    await dev.port.setSignals({ dataTerminalReady: true });
+    log("🔄 LifeBot reboot signal sent to " + dev.name, "#f90");
+  } catch (err) {
+    log("Reboot failed: " + err, "red");
+  }
+}
+
+// ----- terminal input -----
+async function sendCmd() {
+  const input = document.getElementById("cmdInput");
+  const cmd = input.value.trim();
+  if (!cmd) return;
+  await sendToActive(cmd);
+  log("> " + cmd, "#ccc");
+  history.push(cmd);
+  historyIndex = history.length;
+  input.value = "";
+}
+
+// ----- script send/save/load -----
+async function sendScript() {
+  const script = getEditorText().split("\n");
+  for (const line of script) {
+    if (line.trim().length === 0) continue;
+    await sendToActive(line);
+    await new Promise(r => setTimeout(r, 5));
+  }
+  log("Script sent to active LifeBot", "#6cf");
+}
+
+function saveScript() {
+  const text = getEditorText();
+  localStorage.setItem("lifebot_script", text);
+  const blob = new Blob([text], { type: "text/plain" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "lifebot_script.txt";
+  a.click();
+}
+
+function loadScriptLocal() {
+  const text = localStorage.getItem("lifebot_script");
+  if (text) {
+    aceEditor.setValue(text, -1);
+  } else {
+    log("No script in local storage", "red");
+  }
+}
+
+function handleFileUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    aceEditor.setValue(reader.result, -1);
+  };
+  reader.readAsText(file);
+}
+
+// ----- sensor graph -----
+const canvas = document.getElementById("graphCanvas");
+const ctx = canvas.getContext("2d");
+function resizeCanvas() {
+  canvas.width = canvas.clientWidth;
+  canvas.height = canvas.clientHeight;
+}
+window.addEventListener("resize", resizeCanvas);
+resizeCanvas();
+
+let dataPoints = [];
+
+function handleSensorData(text) {
+  const lines = text.split(/\r?\n/);
+  lines.forEach(line => {
+    line = line.trim();
+    if (line.startsWith("PLOT:")) {
+      const v = parseFloat(line.split(":")[1]);
+      if (!isNaN(v)) {
+        dataPoints.push(v);
+        const maxPoints = parseInt(document.getElementById("maxPoints").value) || 200;
+        if (dataPoints.length > maxPoints) dataPoints.shift();
+        drawGraph();
+      }
+    }
+  });
+}
+
+function drawGraph() {
+  const w = canvas.width, h = canvas.height;
+  ctx.fillStyle = "#050509";
+  ctx.fillRect(0, 0, w, h);
+
+  if (dataPoints.length < 2) return;
+
+  let min = Math.min(...dataPoints);
+  let max = Math.max(...dataPoints);
+  if (!document.getElementById("autoScale").checked) {
+    min = 0; max = 1023;
+  }
+  const range = max - min || 1;
+
+  ctx.strokeStyle = "#6cf";
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  dataPoints.forEach((v, i) => {
+    const x = (i / (dataPoints.length - 1)) * (w - 10) + 5;
+    const y = h - ((v - min) / range) * (h - 10) - 5;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+}
+
+// ----- events -----
+document.getElementById("connectBtn").onclick = connectDevice;
+document.getElementById("rebootBtn").onclick = rebootActive;
+document.getElementById("sendCmdBtn").onclick = sendCmd;
+document.getElementById("clearTerminalBtn").onclick = () => document.getElementById("terminal").innerHTML = "";
+document.getElementById("runScriptBtn").onclick = sendScript;
+document.getElementById("saveScriptBtn").onclick = saveScript;
+document.getElementById("loadScriptBtn").onclick = loadScriptLocal;
+document.getElementById("fileInput").onchange = handleFileUpload;
+
+document.getElementById("cmdInput").addEventListener("keydown", e => {
+  if (e.key === "Enter") sendCmd();
+  if (e.key === "ArrowUp") {
+    if (historyIndex > 0) historyIndex--;
+    document.getElementById("cmdInput").value = history[historyIndex] || "";
+  }
+  if (e.key === "ArrowDown") {
+    if (historyIndex < history.length - 1) historyIndex++;
+    document.getElementById("cmdInput").value = history[historyIndex] || "";
+  }
+});
+
+// robot buttons
+document.getElementById("robotButtons").addEventListener("click", async e => {
+  if (e.target.tagName === "BUTTON") {
+    const cmd = e.target.dataset.cmd;
+    if (cmd) {
+      await sendToActive(cmd);
+      log("> " + cmd, "#ccc");
+    }
+  }
+});
+</script>
+
+</body>
+</html>
     cursor: pointer;
     font-size: 12px;
   }
