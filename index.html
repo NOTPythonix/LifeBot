@@ -1,65 +1,108 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>LifeBot Web Editor</title>
-<style>
-  body {
-    margin: 0;
-    background: #050509;
-    color: #eee;
-    font-family: Consolas, monospace;
-  }
-  header {
-    padding: 10px 15px;
-    background: #0b0b12;
-    border-bottom: 1px solid #222;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-  header h1 {
-    margin: 0;
-    color: #6cf;
-    text-shadow: 0 0 8px #09f;
-    font-size: 18px;
-  }
-  #deviceTabs {
-    display: flex;
-    gap: 5px;
-    margin-left: 20px;
-  }
-  .tab {
-    padding: 4px 10px;
-    border-radius: 4px;
-    background: #111;
-    border: 1px solid #333;
-    cursor: pointer;
-    font-size: 12px;
-  }
-  .tab.active {
-    background: #1b3b5a;
-    border-color: #6cf;
-  }
-  #main {
-    display: grid;
-    grid-template-columns: 1.2fr 1fr;
-    grid-template-rows: 1.1fr 0.9fr;
-    grid-template-areas:
-      "editor terminal"
-      "graph terminal";
-    height: calc(100vh - 50px);
-  }
-  #editorPane {
-    grid-area: editor;
-    border-right: 1px solid #222;
-    border-bottom: 1px solid #222;
-    display: flex;
-    flex-direction: column;
-  }
-  #terminalPane {
-    grid-area: terminal;
-    border-left: 1px solid #222;
+  <meta charset="UTF-8" />
+  <title>ESP32-S3 Web Serial Terminal</title>
+  <style>
+    body { font-family: sans-serif; max-width: 600px; margin: 20px auto; }
+    #log { width: 100%; height: 200px; border: 1px solid #ccc; padding: 5px; overflow-y: auto; white-space: pre-wrap; }
+    #input { width: 80%; }
+  </style>
+</head>
+<body>
+  <h1>ESP32-S3 Web Serial</h1>
+  <button id="connect">Connect</button>
+  <div id="status">Not connected</div>
+
+  <h3>Log</h3>
+  <div id="log"></div>
+
+  <h3>Send data</h3>
+  <input id="input" type="text" placeholder="Type a command..." />
+  <button id="send">Send</button>
+
+  <script>
+    let port;
+    let reader;
+    let writer;
+    const enc = new TextEncoder();
+    const dec = new TextDecoder();
+
+    const statusEl = document.getElementById('status');
+    const logEl = document.getElementById('log');
+    const connectBtn = document.getElementById('connect');
+    const sendBtn = document.getElementById('send');
+    const inputEl = document.getElementById('input');
+
+    function log(msg) {
+      logEl.textContent += msg + '\n';
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    async function connect() {
+      try {
+        // Ask user to select a serial port
+        port = await navigator.serial.requestPort();
+        await port.open({ baudRate: 115200 });
+
+        statusEl.textContent = 'Connected';
+        log('Port opened at 115200 baud');
+
+        // Set up reader
+        reader = port.readable.getReader();
+        readLoop();
+
+        // Set up writer
+        writer = port.writable.getWriter();
+      } catch (err) {
+        console.error(err);
+        log('Error: ' + err);
+      }
+    }
+
+    async function readLoop() {
+      try {
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) {
+            log('Reader closed');
+            break;
+          }
+          if (value) {
+            log(dec.decode(value));
+          }
+        }
+      } catch (err) {
+        log('Read error: ' + err);
+      }
+    }
+
+    async function send() {
+      if (!writer) {
+        log('Not connected');
+        return;
+      }
+      const text = inputEl.value + '\n';
+      await writer.write(enc.encode(text));
+      log('> ' + text.trim());
+      inputEl.value = '';
+    }
+
+    connectBtn.addEventListener('click', () => {
+      if (!('serial' in navigator)) {
+        alert('Web Serial API not supported in this browser. Use Chrome/Edge on desktop.');
+        return;
+      }
+      connect();
+    });
+
+    sendBtn.addEventListener('click', send);
+    inputEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') send();
+    });
+  </script>
+</body>
+</html>
     display: flex;
     flex-direction: column;
   }
