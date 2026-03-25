@@ -1,86 +1,483 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Multi-Script Tabs</title>
+  <meta charset="utf-8" />
+  <title>LifeBot Web Editor</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
-    body { font-family: sans-serif; max-width: 900px; margin: 20px auto; }
-    .tabs { display: flex; gap: 8px; margin-bottom: 10px; }
-    .tab {
-      padding: 6px 12px;
-      border: 1px solid #ccc;
+    :root {
+      --accent: #0b66ff;
+      --muted: #666;
+      --bg: #f7f8fb;
+      --panel: #fff;
+      --text: #111;
+      --panel-border: #e3e8f0;
+      --tab-bg: #f1f5fb;
+      --tab-border: #e6eefc;
+      --log-bg: #0b1220;
+      --log-text: #dff3ff;
+      --status-bg: #fff0f0;
+      --status-color: #c0392b;
+    }
+
+    [data-theme="dark"] {
+      --accent: #4aa3ff;
+      --muted: #9aa6b2;
+      --bg: #0b0f14;
+      --panel: #0f1720;
+      --text: #e6eef8;
+      --panel-border: #1b2430;
+      --tab-bg: #0f1724;
+      --tab-border: #1b2a3a;
+      --log-bg: #071018;
+      --log-text: #bfefff;
+      --status-bg: #062033;
+      --status-color: #7fd1ff;
+    }
+
+    html,body { height:100%; }
+    body {
+      font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      margin: 18px;
+      background: var(--bg);
+      color: var(--text);
+      -webkit-font-smoothing:antialiased;
+      -moz-osx-font-smoothing:grayscale;
+    }
+
+    header { display:flex; align-items:center; gap:16px; margin-bottom:12px; }
+    h1 { font-size:18px; margin:0; }
+    .controls { margin-left:auto; display:flex; gap:8px; align-items:center; }
+
+    button {
+      background: var(--panel);
+      border: 1px solid var(--panel-border);
+      padding: 8px 10px;
+      border-radius: 6px;
       cursor: pointer;
-      border-bottom: none;
-      background: #eee;
+      color: var(--text);
     }
-    .tab.active { background: #fff; font-weight: bold; }
-    .panel {
-      border: 1px solid #ccc;
-      padding: 10px;
+    button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+    button.ghost { background: transparent; border-color: transparent; }
+
+    .layout { display:grid; grid-template-columns: 1fr 360px; gap:12px; align-items:start; }
+    .panel { background: var(--panel); border: 1px solid var(--panel-border); border-radius:8px; padding:12px; }
+    .tabs { display:flex; gap:6px; margin-bottom:8px; flex-wrap:wrap; }
+    .tab {
+      padding:6px 10px;
+      border-radius:6px;
+      background: var(--tab-bg);
+      border: 1px solid var(--tab-border);
+      cursor:pointer;
+      color: var(--text);
     }
-    textarea {
-      width: 100%;
-      height: 200px;
-      font-family: monospace;
+    .tab.active { background: var(--panel); border-color: var(--accent); color: var(--accent); font-weight:600; }
+    .tab .close { margin-left:8px; color: #999; cursor:pointer; font-weight:700; }
+
+    .editor { width:100%; height:260px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", monospace; font-size:13px; padding:8px; border-radius:6px; border:1px solid var(--tab-border); box-sizing:border-box; resize:vertical; background: transparent; color: var(--text); }
+    .small { font-size:13px; color: var(--muted); }
+    .log { height:300px; overflow:auto; white-space:pre-wrap; background: var(--log-bg); color: var(--log-text); padding:10px; border-radius:6px; font-family: ui-monospace, monospace; font-size:13px; border:1px solid rgba(255,255,255,0.04); }
+    .row { display:flex; gap:8px; align-items:center; margin-top:8px; }
+    .input { padding:8px; border-radius:6px; border:1px solid var(--tab-border); width:100%; background: transparent; color: var(--text); }
+    .meta { display:flex; gap:12px; align-items:center; color:var(--muted); font-size:13px; }
+    .badge { background: rgba(14, 102, 255, 0.08); color: var(--accent); padding:4px 8px; border-radius:999px; border:1px solid rgba(11,102,255,0.12); font-weight:600; }
+
+    /* small responsive */
+    @media (max-width: 920px) {
+      .layout { grid-template-columns: 1fr; }
+      .panel { margin-bottom: 12px; }
     }
-    .buttons { margin-top: 10px; display: flex; gap: 8px; }
   </style>
 </head>
 <body>
-  <h1>ESP32-S3 Script Runner</h1>
+  <header>
+    <h1>LifeBot Web Editor</h1>
 
-  <div class="tabs">
-    <div class="tab active" data-target="script1">Script 1</div>
-    <div class="tab" data-target="script2">Script 2</div>
-    <div class="tab" data-target="script3">Script 3</div>
-  </div>
+    <div class="meta" style="gap:8px;">
+      <div id="statusBadge" class="badge">Disconnected</div>
+      <div class="small" id="baudLabel">Baud: 115200</div>
+    </div>
 
-  <div class="panel">
-    <textarea id="script1" class="script-area">// Script 1 here</textarea>
-    <textarea id="script2" class="script-area" style="display:none;">// Script 2 here</textarea>
-    <textarea id="script3" class="script-area" style="display:none;">// Script 3 here</textarea>
+    <div class="controls" role="toolbar" aria-label="Controls">
+      <label for="themeToggle" class="small" style="align-self:center;">Theme</label>
+      <select id="themeToggle" title="Theme">
+        <option value="light">Light</option>
+        <option value="dark">Dark</option>
+        <option value="system">System</option>
+      </select>
 
-    <div class="buttons">
-      <button id="run">Run current script</button>
-      <button id="save">Save current script</button>
+      <select id="baud" title="Baud rate">
+        <option>9600</option><option>19200</option><option>38400</option><option selected>115200</option><option>230400</option><option>460800</option>
+      </select>
+
+      <button id="connectBtn" class="primary">Connect</button>
+      <button id="disconnectBtn" style="display:none;">Disconnect</button>
+    </div>
+  </header>
+
+  <div class="layout" id="appRoot">
+    <!-- Left: Editor -->
+    <div>
+      <div class="panel">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <strong>Scripts</strong>
+            <div class="small">Create, switch, run, and save scripts. Send to device over serial.</div>
+          </div>
+          <div style="display:flex; gap:8px;">
+            <button id="addTab">+ New</button>
+            <button id="runAll">Run All</button>
+          </div>
+        </div>
+
+        <div class="tabs" id="tabs" role="tablist" aria-label="Script tabs"></div>
+
+        <div id="editors" style="margin-top:8px;">
+          <!-- Textareas inserted here -->
+        </div>
+
+        <div class="row" style="margin-top:10px;">
+          <button id="runBtn" class="primary">Run current</button>
+          <button id="sendBtn">Send current</button>
+          <button id="saveBtn">Save</button>
+          <input id="scriptName" class="input" placeholder="Rename current tab (optional)" style="width:220px;">
+        </div>
+      </div>
+
+      <div style="height:12px;"></div>
+
+      <div class="panel">
+        <strong>Quick Terminal</strong>
+        <div class="small">Type a line and press Enter to send immediately.</div>
+        <div class="row" style="margin-top:8px;">
+          <input id="quickInput" class="input" placeholder="Send raw text to device (press Enter)" />
+          <button id="quickSend">Send</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Serial Log -->
+    <div>
+      <div class="panel">
+        <strong>Serial Log</strong>
+        <div class="small">Incoming and outgoing serial traffic.</div>
+        <div id="log" class="log" aria-live="polite"></div>
+
+        <div class="row" style="margin-top:10px;">
+          <button id="clearLog">Clear</button>
+          <label class="small" style="margin-left:auto;">
+            <input type="checkbox" id="autoScroll" checked /> Auto-scroll
+          </label>
+        </div>
+      </div>
     </div>
   </div>
 
   <script>
-    const tabs = document.querySelectorAll('.tab');
-    const areas = document.querySelectorAll('.script-area');
-    let currentId = 'script1';
+    // Theme handling (light/dark/system)
+    const themeSelect = document.getElementById('themeToggle');
+    const root = document.documentElement;
+    const THEME_KEY = 'lifebot_theme_pref';
 
-    tabs.forEach(tab => {
-      tab.addEventListener('click', () => {
-        // Switch active tab
-        tabs.forEach(t => t.classList.remove('active'));
-        tab.classList.add('active');
+    function applyTheme(pref) {
+      if (pref === 'system') {
+        const dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        root.setAttribute('data-theme', dark ? 'dark' : 'light');
+      } else {
+        root.setAttribute('data-theme', pref === 'dark' ? 'dark' : 'light');
+      }
+    }
 
-        // Show corresponding textarea
-        currentId = tab.dataset.target;
-        areas.forEach(a => {
-          a.style.display = (a.id === currentId) ? 'block' : 'none';
-        });
+    // load saved preference
+    const saved = localStorage.getItem(THEME_KEY) || 'system';
+    themeSelect.value = saved;
+    applyTheme(saved);
+
+    themeSelect.addEventListener('change', (e) => {
+      const val = e.target.value;
+      localStorage.setItem(THEME_KEY, val);
+      applyTheme(val);
+    });
+
+    // react to system changes when in 'system' mode
+    if (window.matchMedia) {
+      window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+        if (localStorage.getItem(THEME_KEY) === 'system') applyTheme('system');
       });
+    }
+
+    // --- Serial + Editor logic (same as before, renamed UI to LifeBot) ---
+    let port = null;
+    let reader = null;
+    let writer = null;
+    let keepReading = false;
+    const enc = new TextEncoder();
+    const dec = new TextDecoder();
+    const tabsEl = document.getElementById('tabs');
+    const editorsEl = document.getElementById('editors');
+    const logEl = document.getElementById('log');
+    const statusBadge = document.getElementById('statusBadge');
+    const baudSelect = document.getElementById('baud');
+
+    function log(msg, kind = 'in') {
+      const time = new Date().toLocaleTimeString();
+      const prefix = kind === 'out' ? '→' : kind === 'err' ? '!' : '←';
+      logEl.textContent += `[${time}] ${prefix} ${msg}\n`;
+      if (document.getElementById('autoScroll').checked) {
+        logEl.scrollTop = logEl.scrollHeight;
+      }
+    }
+
+    function setStatus(connected) {
+      statusBadge.textContent = connected ? 'Connected' : 'Disconnected';
+      statusBadge.style.background = connected ? 'rgba(14, 102, 255, 0.08)' : '';
+      statusBadge.style.color = connected ? 'var(--accent)' : '';
+      document.getElementById('connectBtn').style.display = connected ? 'none' : '';
+      document.getElementById('disconnectBtn').style.display = connected ? '' : 'none';
+      document.getElementById('baudLabel').textContent = 'Baud: ' + baudSelect.value;
+    }
+
+    // Tabs / Editors
+    let tabCounter = 0;
+    let activeTabId = null;
+    const scripts = {};
+
+    function createTab(name = null, content = '') {
+      tabCounter++;
+      const id = 'script' + tabCounter;
+      const tabBtn = document.createElement('div');
+      tabBtn.className = 'tab';
+      tabBtn.dataset.id = id;
+      tabBtn.setAttribute('role','tab');
+      tabBtn.innerHTML = `<span class="title">${name || id}</span><span class="close" title="Close">×</span>`;
+      tabsEl.appendChild(tabBtn);
+
+      const ta = document.createElement('textarea');
+      ta.id = id;
+      ta.className = 'editor';
+      ta.value = content;
+      ta.style.display = 'none';
+      editorsEl.appendChild(ta);
+
+      scripts[id] = { name: name || id, content };
+
+      tabBtn.querySelector('.close').addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeTab(id);
+      });
+
+      tabBtn.addEventListener('click', () => activateTab(id));
+      activateTab(id);
+      return id;
+    }
+
+    function activateTab(id) {
+      activeTabId = id;
+      document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.id === id));
+      document.querySelectorAll('.editor').forEach(e => e.style.display = (e.id === id) ? 'block' : 'none');
+      const name = scripts[id]?.name || id;
+      document.getElementById('scriptName').value = name;
+    }
+
+    function closeTab(id) {
+      if (!scripts[id]) return;
+      const tabBtn = document.querySelector(`.tab[data-id="${id}"]`);
+      const ta = document.getElementById(id);
+      tabBtn.remove();
+      ta.remove();
+      delete scripts[id];
+      if (activeTabId === id) {
+        const remaining = Object.keys(scripts);
+        if (remaining.length) activateTab(remaining[0]);
+        else createTab('script1', '// new script');
+      }
+    }
+
+    function renameActiveTab(newName) {
+      if (!activeTabId) return;
+      scripts[activeTabId].name = newName || activeTabId;
+      const tabBtn = document.querySelector(`.tab[data-id="${activeTabId}"]`);
+      tabBtn.querySelector('.title').textContent = scripts[activeTabId].name;
+    }
+
+    function getActiveContent() {
+      if (!activeTabId) return '';
+      const ta = document.getElementById(activeTabId);
+      return ta.value;
+    }
+
+    function setActiveContent(text) {
+      if (!activeTabId) return;
+      const ta = document.getElementById(activeTabId);
+      ta.value = text;
+    }
+
+    // Initialize with three tabs
+    createTab('movement', `// Example: send movement commands\nforward();\nleft();\nright();\n`);
+    createTab('sit', `// Example: sit command\nsit();\n`);
+    createTab('test', `// Test script\nping();\n`);
+
+    // Tab controls
+    document.getElementById('addTab').addEventListener('click', () => createTab('script' + (tabCounter+1), '// new script'));
+    document.getElementById('scriptName').addEventListener('change', (e) => {
+      renameActiveTab(e.target.value.trim());
     });
 
-    document.getElementById('run').addEventListener('click', () => {
-      const code = document.getElementById(currentId).value;
-      console.log('Run script from', currentId, ':\n', code);
-      // Here is where you hook into Web Serial:
-      // await writer.write(enc.encode(code));
-    });
-
-    document.getElementById('save').addEventListener('click', () => {
-      const code = document.getElementById(currentId).value;
-      const blob = new Blob([code], { type: 'text/plain' });
+    // Save current script to file
+    document.getElementById('saveBtn').addEventListener('click', () => {
+      const name = (scripts[activeTabId]?.name || activeTabId) + '.txt';
+      const blob = new Blob([getActiveContent()], { type: 'text/plain' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = currentId + '.txt';
+      a.download = name;
       a.click();
       URL.revokeObjectURL(a.href);
     });
+
+    // Run current script (sends content over serial, line by line)
+    async function runScriptContent(content) {
+      if (!writer) {
+        log('Not connected. Cannot run script.', 'err');
+        return;
+      }
+      const lines = content.split(/\r?\n/);
+      for (const line of lines) {
+        if (line.trim() === '') continue;
+        try {
+          await writer.write(enc.encode(line + '\n'));
+          log(line, 'out');
+          await new Promise(r => setTimeout(r, 60));
+        } catch (err) {
+          log('Write error: ' + err, 'err');
+          break;
+        }
+      }
+    }
+
+    document.getElementById('runBtn').addEventListener('click', async () => {
+      const content = getActiveContent();
+      await runScriptContent(content);
+    });
+
+    document.getElementById('runAll').addEventListener('click', async () => {
+      for (const id of Object.keys(scripts)) {
+        const ta = document.getElementById(id);
+        if (ta) {
+          log(`Running ${scripts[id].name}`, 'out');
+          await runScriptContent(ta.value);
+          await new Promise(r => setTimeout(r, 200));
+        }
+      }
+    });
+
+    // Send current script as a single blob (no line delays)
+    document.getElementById('sendBtn').addEventListener('click', async () => {
+      if (!writer) { log('Not connected. Cannot send.', 'err'); return; }
+      const content = getActiveContent();
+      try {
+        await writer.write(enc.encode(content + '\n'));
+        log('(sent script blob)', 'out');
+      } catch (err) {
+        log('Send error: ' + err, 'err');
+      }
+    });
+
+    // Quick input
+    document.getElementById('quickSend').addEventListener('click', async () => {
+      const text = document.getElementById('quickInput').value;
+      if (!text) return;
+      if (!writer) { log('Not connected. Cannot send.', 'err'); return; }
+      try {
+        await writer.write(enc.encode(text + '\n'));
+        log(text, 'out');
+      } catch (err) {
+        log('Quick send error: ' + err, 'err');
+      }
+    });
+
+    document.getElementById('quickInput').addEventListener('keydown', async (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        document.getElementById('quickSend').click();
+        document.getElementById('quickInput').value = '';
+      }
+    });
+
+    // Clear log
+    document.getElementById('clearLog').addEventListener('click', () => logEl.textContent = '');
+
+    // Web Serial connect/disconnect
+    async function connectSerial() {
+      if (!('serial' in navigator)) {
+        alert('Web Serial API not supported. Use Chrome/Edge on desktop.');
+        return;
+      }
+      try {
+        port = await navigator.serial.requestPort();
+        const baud = Number(baudSelect.value || 115200);
+        await port.open({ baudRate: baud });
+        writer = port.writable.getWriter();
+        reader = port.readable.getReader();
+        keepReading = true;
+        setStatus(true);
+        log('Port opened at ' + baud, 'in');
+        readLoop();
+      } catch (err) {
+        log('Connection error: ' + err, 'err');
+        setStatus(false);
+      }
+    }
+
+    async function disconnectSerial() {
+      keepReading = false;
+      try {
+        if (reader) { await reader.cancel(); reader.releaseLock(); reader = null; }
+        if (writer) { writer.releaseLock(); writer = null; }
+        if (port) { await port.close(); port = null; }
+        setStatus(false);
+        log('Disconnected', 'in');
+      } catch (err) {
+        log('Disconnect error: ' + err, 'err');
+      }
+    }
+
+    async function readLoop() {
+      while (keepReading && reader) {
+        try {
+          const { value, done } = await reader.read();
+          if (done) break;
+          if (value) {
+            log(dec.decode(value), 'in');
+          }
+        } catch (err) {
+          log('Read error: ' + err, 'err');
+          break;
+        }
+      }
+      setStatus(false);
+    }
+
+    document.getElementById('connectBtn').addEventListener('click', connectSerial);
+    document.getElementById('disconnectBtn').addEventListener('click', disconnectSerial);
+
+    // Update baud label when changed
+    baudSelect.addEventListener('change', () => {
+      document.getElementById('baudLabel').textContent = 'Baud: ' + baudSelect.value;
+    });
+
+    // Save editor content to scripts state on change
+    editorsEl.addEventListener('input', (e) => {
+      if (e.target && e.target.classList.contains('editor')) {
+        const id = e.target.id;
+        if (scripts[id]) scripts[id].content = e.target.value;
+      }
+    });
+
+    // Prevent accidental <kw> insertion note (editor issue)
+    // This page does not auto-insert "<kw>".
+
+    // Initial UI state
+    setStatus(false);
   </script>
 </body>
 </html>
